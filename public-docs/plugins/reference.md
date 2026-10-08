@@ -2077,17 +2077,29 @@ A plugin that provisions a machine with a Paseo daemon can register it as a host
 **Settings → Add host → Remote SSH** does, and remove it again when the machine goes away:
 
 ```tsx
-import { addRemoteSshHost, getPaseoClient, removeHost } from "@getpaseo/plugin/client";
+import { addRemoteSshHost, getPaseoClient, removeHost, useHosts } from "@getpaseo/plugin/client";
 
+// In an action callback: register the machine and remember its server ID.
 const host = await addRemoteSshHost({ target: "ssh://root@vm-1.example", label: "VM 1" });
-const { entries } = await getPaseoClient(host.serverId).agents.list();
-await removeHost(host.serverId);
+setServerId(host.serverId);
+
+// In the component: borrow the client only once the app connection is online.
+const online = useHosts().some((entry) => entry.serverId === serverId && entry.status === "online");
+if (online) {
+  const { entries } = await getPaseoClient(serverId).agents.list();
+}
+
+// When the machine goes away.
+await removeHost(serverId);
 ```
 
-| Function                                          | Behavior                                                                                                                                                                                                                                                                                                                                     |
-| ------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `addRemoteSshHost({ target, label?, password? })` | Connects through `ssh -W` first and saves the host under the server ID the daemon reports; a failed connection saves nothing and rejects with the connection error. `target` is `ssh://user@host[:port][?daemonPort=N]`. An address that already exists updates that host and keeps its label. Resolves with the host's `PluginHostSummary`. |
-| `removeHost(serverId)`                            | Removes the host and its connections. Rejects an unknown ID and the host this installation runs on.                                                                                                                                                                                                                                          |
+`addRemoteSshHost` resolves once the host is saved. The app connection to it may still be
+`connecting`; wait for `status: "online"` in `useHosts()` before calling `getPaseoClient`.
+
+| Function                                          | Behavior                                                                                                                                                                                                                                                                                                                                                                                            |
+| ------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `addRemoteSshHost({ target, label?, password? })` | Connects through `ssh -W` first and saves the host under the server ID the daemon reports; a failed connection saves nothing and rejects with the connection error. `target` is `ssh://user@host[:port][?daemonPort=N]`. An address that already exists updates that host and keeps its label. Resolves with the host's `PluginHostSummary`, also when the plugin unloads after the host was saved. |
+| `removeHost(serverId)`                            | Removes the host and its connections. Rejects an unknown ID and the host this installation runs on.                                                                                                                                                                                                                                                                                                 |
 
 Hosts are durable user data, not registrations: they stay configured after the plugin unloads,
 and the user can rename or remove them in Settings. Remote SSH is available in the desktop app

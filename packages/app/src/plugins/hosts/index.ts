@@ -135,15 +135,15 @@ export function createPluginHosts(
         ...(input.label === undefined ? {} : { label: input.label }),
         ...(input.password === undefined ? {} : { password: input.password }),
       });
-      requireRunning();
-      refresh();
-      return (
-        snapshot.find((host) => host.serverId === serverId) ?? {
-          serverId,
-          label: input.label ?? serverId,
-          status: "offline",
-        }
-      );
+      // The store has saved the host by now; report it even if the plugin stopped meanwhile,
+      // so the caller can track or remove what it created.
+      if (!signal.aborted) refresh();
+      const saved = source.getHosts().find((host) => host.serverId === serverId);
+      return {
+        serverId,
+        label: saved?.label ?? input.label ?? serverId,
+        status: source.getSnapshot(serverId)?.connectionStatus ?? "offline",
+      };
     },
     async removeHost(serverId: string): Promise<void> {
       requireRunning();

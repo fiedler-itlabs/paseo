@@ -180,6 +180,24 @@ describe("plugin host registration", () => {
     h.lifetime.abort();
   });
 
+  it("returns a host that was saved even if the plugin stopped while it connected", async () => {
+    const h = registry();
+    let finishProbe: (value: { serverId: string }) => void = () => {};
+    h.source.probeAndUpsertRemoteSshConnection = (input) =>
+      new Promise((resolve) => {
+        h.upserts.push(input);
+        finishProbe = (value) => {
+          h.hosts.push({ serverId: value.serverId, label: "Late", password: "" });
+          resolve(value);
+        };
+      });
+    const pending = h.runtime.addRemoteSshHost({ target: "ssh://late-vm" });
+    await Promise.resolve();
+    h.lifetime.abort();
+    finishProbe({ serverId: "late" });
+    await expect(pending).resolves.toEqual({ serverId: "late", label: "Late", status: "offline" });
+  });
+
   it("rejects host changes after the plugin stops", async () => {
     const h = registry();
     h.lifetime.abort();
